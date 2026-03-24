@@ -265,6 +265,7 @@ export async function wireProvidersToPI(pi: ExtensionAPI): Promise<void> {
     if (UPSTREAM_AUTH_MODE_SUPPORT) {
       pi.registerProvider(info.id, {
         authMode: info.authMode,
+        isReady: info.isReady,
         api: apiId,
         baseUrl,
         apiKey: info.apiKey,

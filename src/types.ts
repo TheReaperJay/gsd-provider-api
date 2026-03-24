@@ -138,6 +138,9 @@ export interface GsdProviderInfo {
   /** Default model ID to set after successful onboarding. */
   defaultModel?: string;
 
+  /** Optional runtime readiness check. Return false if the provider cannot accept requests (e.g., CLI not authenticated, local server not running). Called by Pi's isProviderRequestReady() before default auth checks. */
+  isReady?: () => boolean;
+
   /** Models available from this provider. */
   models: GsdModel[];
 

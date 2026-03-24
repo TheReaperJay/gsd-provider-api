@@ -55,7 +55,7 @@ When the authMode PR is merged and a new version of `gsd-pi` is published:
 
 1. In `src/adapter.ts`, flip: `const UPSTREAM_AUTH_MODE_SUPPORT = true;`
 2. Update `gsd-pi` devDependency to the version that includes the PR.
-3. The `UPSTREAM_AUTH_MODE_SUPPORT = true` path passes `authMode` directly and uses the provider's real `apiKey` field (or omits it for keyless providers).
+3. The `UPSTREAM_AUTH_MODE_SUPPORT = true` path passes `authMode` and `isReady` directly and uses the provider's real `apiKey` field (or omits it for keyless providers).
 4. Once confirmed working, delete the `false` branch, the `KEYLESS_PROVIDER_DUMMY_KEY` constant, and the `needsDummyKey()` function.
 5. Delete this file.
 
@@ -63,6 +63,8 @@ When the authMode PR is merged and a new version of `gsd-pi` is published:
 
 This workaround exists because Pi's auth system conflates "does this provider have credentials" with "is this provider ready to serve requests." These are not the same thing. A provider that authenticates via an external CLI is ready the moment the CLI is installed — it doesn't need Pi to hold a key for it.
 
-The PR separates these two concerns with a single method (`isProviderRequestReady`) and a single field (`authMode`). It's 158 lines added, 54 removed, zero behavioral change for existing providers, and it unblocks an entire category of provider integrations that Pi currently cannot support.
+The PR separates these two concerns with a single method (`isProviderRequestReady`), a single field (`authMode`), and an optional `isReady` callback. It's additive, zero behavioral change for existing providers, and it unblocks an entire category of provider integrations that Pi currently cannot support.
+
+The `isReady` callback (added in commit `204d7e2`) takes this further — `isProviderRequestReady()` calls it **before** the authMode/credential checks, giving providers real-time control over their readiness state. For example, an `externalCli` provider can verify the CLI is actually authenticated, or a local model provider can check if the server is running. Without the PR, this level of readiness verification is impossible from an extension.
 
 The existence of this workaround — a dummy key injected to fool the auth system — is evidence that the abstraction is wrong. The fix is small and clean. The workaround is not.

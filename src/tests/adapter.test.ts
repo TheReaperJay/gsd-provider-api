@@ -8,6 +8,7 @@ import type { GsdProviderInfo, GsdEvent, GsdEventStream, GsdProviderDeps } from 
 import { wireProvidersToPI } from "../adapter.js";
 import {
   registerProviderInfo,
+  getRegisteredProviderInfos,
   setProviderDeps,
   clearProviderDeps,
   clearRegisteredProviderInfos,
@@ -247,6 +248,22 @@ describe("adapter", () => {
       const rawEvents = events as Array<{ type: string }>;
       assert.ok(!rawEvents.some(e => e.type === "tool_start"), "tool_start must NOT appear in Pi stream");
       assert.ok(!rawEvents.some(e => e.type === "tool_end"), "tool_end must NOT appear in Pi stream");
+    });
+  });
+
+  describe("isReady callback", () => {
+    it("provider info with isReady can be registered and retrieved", async () => {
+      const id = `ready-stub-${Date.now()}`;
+      const isReady = () => true;
+      const provider = { ...makeTestProvider(id, []), isReady };
+      registerProviderInfo(provider);
+      const { pi, registered } = makeMockPi();
+      await wireProvidersToPI(pi);
+      assert.ok(registered.has(id), "provider with isReady must be registered");
+
+      const retrieved = getRegisteredProviderInfos().find(p => p.id === id);
+      assert.ok(retrieved, "provider must be retrievable from registry");
+      assert.equal(retrieved.isReady, isReady, "isReady callback must be preserved on the provider info");
     });
   });
 });
