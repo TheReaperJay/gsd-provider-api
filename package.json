@@ -1,0 +1,46 @@
+{
+  "name": "@thereaperjay/gsd-provider-api",
+  "version": "0.1.0",
+  "description": "Provider contracts, registries, discovery, onboarding, and Pi adapter for GSD-compatible provider extensions",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheReaperJay/gsd-provider-api.git"
+  },
+  "keywords": [
+    "gsd",
+    "provider",
+    "plugin",
+    "adapter",
+    "pi"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@gsd/pi-ai": ">=2.0.0",
+    "@gsd/pi-coding-agent": ">=2.0.0"
+  },
+  "dependencies": {
+    "@mariozechner/jiti": "^2.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "typescript": "^5.6.3",
+    "zod": "^3.24.1"
+  }
+}
