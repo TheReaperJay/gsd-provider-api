@@ -8,7 +8,12 @@
     "strict": true,
     "declaration": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@gsd/pi-ai": ["node_modules/gsd-pi/packages/pi-ai/dist/index.d.ts"],
+      "@gsd/pi-coding-agent": ["node_modules/gsd-pi/packages/pi-coding-agent/dist/index.d.ts"]
+    }
   },
   "include": ["src"],
   "exclude": ["src/tests"]

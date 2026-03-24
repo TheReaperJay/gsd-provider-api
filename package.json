@@ -7,6 +7,9 @@
     "type": "git",
     "url": "https://github.com/TheReaperJay/gsd-provider-api.git"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "keywords": [
     "gsd",
     "provider",
@@ -40,6 +43,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.12.0",
+    "gsd-pi": "^2.43.0",
     "typescript": "^5.6.3",
     "zod": "^3.24.1"
   }
