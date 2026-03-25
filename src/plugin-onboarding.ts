@@ -4,12 +4,13 @@
  * If the provider declares a custom `onboard()` function, that is called and its
  * boolean result is wrapped in `{ ok }`.
  *
- * For providers with `onboarding.kind === "externalCli"`, the default flow runs:
- * spinner, check(), and optional default model selection.
+ * Otherwise the default fallback logs a generic installation message and returns ok.
+ * The default does not assume the extension is a provider CLI, does not run auth
+ * checks, and does not change the user's default provider.
  */
 
 import type { GsdProviderInfo } from "./types.js";
-import type { AuthStorage, SettingsManager } from "@gsd/pi-coding-agent";
+import type { AuthStorage } from "@gsd/pi-coding-agent";
 
 type ClackModule = typeof import("@clack/prompts");
 type PicoModule = {
@@ -27,28 +28,15 @@ export async function runPluginOnboarding(
   p: ClackModule,
   pc: PicoModule,
   authStorage: AuthStorage,
-  settingsManager?: SettingsManager,
 ): Promise<{ ok: boolean }> {
   if (pp.onboard) {
     const result = await pp.onboard(p, pc, authStorage);
     return { ok: result };
   }
 
-  if (pp.onboarding?.kind === "externalCli") {
-    const s = p.spinner();
-    s.start(`Checking ${pp.displayName}...`);
-    const result = pp.onboarding.check();
-    if (result.ok) {
-      s.stop(`${pc.green(pp.displayName)} authenticated${result.email ? ` as ${result.email}` : ""}`);
-      if (pp.defaultModel && settingsManager) {
-        settingsManager.setDefaultModelAndProvider(pp.id, pp.defaultModel);
-      }
-      return { ok: true };
-    }
-
-    s.stop(`${pp.displayName}: ${result.reason}`);
-    p.log.warn(result.instruction);
-    return { ok: false };
+  p.log.info(`${pc.green(pp.displayName)} installed. See extension instructions for further steps.`);
+  if (pp.models.length > 0) {
+    p.log.info(`${pc.dim("If this is a provider, update your default with /provider.")}`);
   }
 
   return { ok: true };
