@@ -231,7 +231,7 @@ GSD publishes available tools here. Providers can read them to expose tools to t
 
 | Function | Description |
 |---|---|
-| `runPluginOnboarding(provider, clack, pico, authStorage)` | Runs the provider's onboarding flow. If the provider defines a custom `onboard()`, that runs. Otherwise, logs a generic install message and hints about `/provider`. |
+| `runPluginOnboarding(provider)` | Self-contained onboarding. If `onboard()` is set on the provider, it runs with clack/pico passed from the library. If `onboarding.kind === "externalCli"`, runs spinner + `check()`. Otherwise logs a generic install message. Returns `{ ok: boolean }`. The library owns `@clack/prompts` and `picocolors` — extensions do not need to install them. |
 
 See [INTEGRATION.md](./INTEGRATION.md) for the full two-phase lifecycle (CLI install + session start) and how to structure your extension's onboarding.
 

@@ -1,6 +1,6 @@
 {
   "name": "@thereaperjay/gsd-provider-api",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Provider contracts, registries, discovery, onboarding, and Pi adapter for GSD-compatible provider extensions",
   "license": "MIT",
   "repository": {
@@ -39,7 +39,9 @@
     "@gsd/pi-coding-agent": ">=2.0.0"
   },
   "dependencies": {
-    "@mariozechner/jiti": "^2.6.2"
+    "@clack/prompts": "^1.1.0",
+    "@mariozechner/jiti": "^2.6.2",
+    "picocolors": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",

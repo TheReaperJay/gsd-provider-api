@@ -101,25 +101,26 @@ export function afterInstall(ctx: { log: (msg: string) => void; warn: (msg: stri
 // It receives the full ExtensionAPI (pi).
 
 export default async function activate(pi: ExtensionAPI) {
+  await import("./info.ts");
   await wireProvidersToPI(pi);
+
+  // Library handles clack/pico internally. Extension just passes provider info.
+  const result = await runPluginOnboarding(myProviderInfo);
+  if (result.ok) {
+    // Extension decides what to do — e.g., set default model via pi.setModel()
+  }
 }
 ```
 
 ## Onboarding
 
-`gsd-provider-api` provides `runPluginOnboarding()` as a session-time helper. It has two modes:
+`gsd-provider-api` provides `runPluginOnboarding()` as a self-contained session-time helper. The library owns `@clack/prompts` and `picocolors` internally — extensions do **not** need to install them.
 
-### Default behavior (no custom `onboard` function)
+### Three tiers of behavior
 
-If your `GsdProviderInfo` does not set `onboard`, the default runs at session start:
-- Logs that the extension was installed
-- If models are declared, hints to the user about `/provider` for switching
+**Tier 1: Custom `onboard` function** — full control
 
-It does **not** check auth, run spinners, or change the default model. Those are either handled at install time (Phase 1) or by a custom `onboard` function.
-
-### Custom onboarding (set `onboard` on your provider)
-
-For providers that need session-time setup (interactive prompts, model selection, auth storage), set `onboard` on your `GsdProviderInfo`:
+If your `GsdProviderInfo` sets `onboard`, it runs with clack and pico passed from the library:
 
 ```typescript
 const provider: GsdProviderInfo = {
@@ -129,13 +130,13 @@ const provider: GsdProviderInfo = {
   models: [...],
   createStream: ...,
 
-  // Custom onboarding — runs at session start with full clack/pico/authStorage access.
+  // Custom onboarding — full control over the session-time experience.
+  // Receives @clack/prompts and picocolors from the library.
   // Return true if onboarding succeeded, false if it failed.
-  onboard: async (clack, pico, authStorage) => {
+  onboard: async (clack, pico) => {
     const p = clack as typeof import("@clack/prompts");
     const pc = pico as { green: (s: string) => string; dim: (s: string) => string };
 
-    // Example: check auth with a spinner
     const s = p.spinner();
     s.start("Checking my-cli authentication...");
     const result = spawnSync("my-cli", ["auth", "status"], { encoding: "utf-8" });
@@ -146,18 +147,24 @@ const provider: GsdProviderInfo = {
     }
     s.stop(`${pc.green("Authenticated")} as ${result.stdout.trim()}`);
 
-    // Example: ask to set default model
     const setDefault = await p.confirm({
       message: "Set My Provider as the default?",
     });
-    if (setDefault && !p.isCancel(setDefault)) {
-      // Use pi (captured in closure) or settingsManager to set default
-    }
+    if (p.isCancel(setDefault)) return false;
 
+    // Extension handles model selection via pi.setModel() in the caller
     return true;
   },
 };
 ```
+
+**Tier 2: `onboarding.kind === "externalCli"` declared, no custom `onboard`** — default CLI flow
+
+The library runs a spinner, calls `onboarding.check()`, and outputs the result. No custom code needed from the extension — just declare the `onboarding` field on your provider info.
+
+**Tier 3: Neither set** — generic fallback
+
+The library logs a generic "installed" message and hints about `/provider` if models are declared.
 
 ## What Goes Where
 
@@ -167,8 +174,8 @@ const provider: GsdProviderInfo = {
 | CLI authenticated? | Install (`afterInstall`) | `LifecycleHookContext` | `spawnSync("claude", ["auth", "status"])` |
 | Runtime dependencies met? | Install (`afterInstall`) | `LifecycleHookContext` | Check binaries, Python packages, etc. |
 | Register provider with Pi | Session (factory) | `ExtensionAPI` | `wireProvidersToPI(pi)` |
-| Set default model | Session (`onboard`) | clack, pico, AuthStorage | `settingsManager.setDefaultModelAndProvider()` |
-| Interactive auth prompts | Session (`onboard`) | clack, pico, AuthStorage | `p.confirm()`, `p.text()`, etc. |
+| Set default model | Session (factory, after onboarding) | `ExtensionAPI` | `pi.setModel()` based on `runPluginOnboarding()` result |
+| Interactive auth prompts | Session (`onboard`) | clack, pico (from library) | `p.confirm()`, `p.spinner()`, etc. |
 | Stream translation | Session (runtime) | `GsdStreamContext`, `GsdProviderDeps` | `createStream()` yields `GsdEvent` |
 | Readiness check | Session (runtime) | None (pure function) | `isReady: () => boolean` |
 

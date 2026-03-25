@@ -135,9 +135,6 @@ export interface GsdProviderInfo {
   /** Optional default onboarding behavior. */
   onboarding?: GsdProviderOnboarding;
 
-  /** Default model ID to set after successful onboarding. */
-  defaultModel?: string;
-
   /** Optional runtime readiness check. Return false if the provider cannot accept requests (e.g., CLI not authenticated, local server not running). Called by Pi's isProviderRequestReady() before default auth checks. */
   isReady?: () => boolean;
 
@@ -150,12 +147,12 @@ export interface GsdProviderInfo {
   /**
    * Custom onboarding flow. If provided, this overrides default onboarding.
    *
-   * Parameters are typed as unknown because @clack/prompts and picocolors
-   * are dynamic imports.
+   * The library passes @clack/prompts and picocolors — the extension does
+   * not need to install them. Parameters typed as unknown because the
+   * library dynamically imports them.
    */
   onboard?: (
     clack: unknown,
     pico: unknown,
-    authStorage: unknown,
   ) => Promise<boolean>;
 }
