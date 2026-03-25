@@ -42,7 +42,7 @@ This package fills that gap.
 │  Deps Registry          │  ← supervisor config, callbacks
 │  Pi Adapter             │  ← GsdEvent → Pi stream translation
 │  Local Discovery        │  ← auto-loads info.ts files
-│  Onboarding             │  ← CLI check + model selection
+│  Onboarding             │  ← default or custom onboarding
 └────────┬────────────────┘
          │
          │  wireProvidersToPI(pi)
@@ -231,7 +231,9 @@ GSD publishes available tools here. Providers can read them to expose tools to t
 
 | Function | Description |
 |---|---|
-| `runPluginOnboarding(provider, clack, pico, authStorage, settingsManager?)` | Runs the provider's onboarding flow — either a custom `onboard()` function or the default `externalCli` check + model selection. |
+| `runPluginOnboarding(provider, clack, pico, authStorage)` | Runs the provider's onboarding flow. If the provider defines a custom `onboard()`, that runs. Otherwise, logs a generic install message and hints about `/provider`. |
+
+See [INTEGRATION.md](./INTEGRATION.md) for the full two-phase lifecycle (CLI install + session start) and how to structure your extension's onboarding.
 
 ## Runtime Internals
 
