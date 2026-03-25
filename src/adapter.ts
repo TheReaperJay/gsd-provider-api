@@ -17,27 +17,8 @@ import type {
   Message,
   StopReason,
 } from "@gsd/pi-ai";
-import type { GsdProviderInfo, GsdProviderDeps, ProviderAuthMode } from "./types.js";
+import type { GsdProviderInfo, GsdProviderDeps } from "./types.js";
 import { getRegisteredProviderInfos, waitForProviderDeps } from "./provider-registry.js";
-
-/**
- * When true, upstream Pi supports authMode on ProviderConfig natively.
- * Flip this once the authMode PR is merged into the vendored GSD2 Pi fork.
- *
- * When false, externalCli/none providers use a dummy API key literal to
- * bypass Pi's auth validation gates (hasAuth, getApiKey, getAvailable, etc.).
- * This works because Pi resolves the literal as a "key", passes it through
- * its auth pipeline, and the provider's streamSimple ignores it entirely.
- *
- * See: https://github.com/gsd-build/gsd-2 — feat(core): authMode support
- */
-const UPSTREAM_AUTH_MODE_SUPPORT = false;
-
-const KEYLESS_PROVIDER_DUMMY_KEY = "GSD_PROVIDER_KEYLESS";
-
-function needsDummyKey(authMode: ProviderAuthMode): boolean {
-  return authMode === "externalCli" || authMode === "none";
-}
 
 function extractUserPrompt(messages: Message[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -262,24 +243,14 @@ export async function wireProvidersToPI(pi: ExtensionAPI): Promise<void> {
     }));
     const streamSimple = createStreamSimple(info, () => currentCtx, piAi.AssistantMessageEventStream);
 
-    if (UPSTREAM_AUTH_MODE_SUPPORT) {
-      pi.registerProvider(info.id, {
-        authMode: info.authMode,
-        isReady: info.isReady,
-        api: apiId,
-        baseUrl,
-        apiKey: info.apiKey,
-        streamSimple,
-        models,
-      } as Record<string, unknown>);
-    } else {
-      pi.registerProvider(info.id, {
-        api: apiId,
-        baseUrl,
-        apiKey: needsDummyKey(info.authMode) ? KEYLESS_PROVIDER_DUMMY_KEY : info.apiKey,
-        streamSimple,
-        models,
-      });
-    }
+    pi.registerProvider(info.id, {
+      authMode: info.authMode,
+      isReady: info.isReady,
+      api: apiId,
+      baseUrl,
+      apiKey: info.apiKey,
+      streamSimple,
+      models,
+    } as Record<string, unknown>);
   }
 }
