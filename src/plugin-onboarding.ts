@@ -10,14 +10,16 @@
  */
 
 import type { GsdProviderInfo } from "./types.js";
+import type pico from "picocolors";
 
 export async function runPluginOnboarding(
   pp: GsdProviderInfo,
 ): Promise<{ ok: boolean }> {
-  const [p, pc] = await Promise.all([
+  const [p, picoModule] = await Promise.all([
     import("@clack/prompts"),
     import("picocolors"),
   ]);
+  const pc: typeof pico = (picoModule as { default?: typeof pico }).default ?? picoModule as typeof pico;
 
   if (pp.onboard) {
     const result = await pp.onboard(p, pc);
