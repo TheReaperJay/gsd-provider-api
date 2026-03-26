@@ -18,7 +18,7 @@ import type {
   StopReason,
 } from "@gsd/pi-ai";
 import type { GsdProviderInfo, GsdProviderDeps, PluginLifecycleHandler } from "./types.js";
-import { getRegisteredProviderInfos, waitForProviderDeps } from "./provider-registry.js";
+import { getRegisteredProviderInfos, waitForProviderDeps, getProviderDeps, setProviderDeps } from "./provider-registry.js";
 import { readPluginState, writePluginState } from "./plugin-state.js";
 import { runPluginOnboarding } from "./plugin-onboarding.js";
 
@@ -131,14 +131,17 @@ function createStreamSimple(
     };
 
     (async () => {
-      const deps: GsdProviderDeps | null = await waitForProviderDeps();
-      if (deps === null) {
-        output.stopReason = "error";
-        output.errorMessage = "GSD provider deps not initialized — provider invoked before orchestration runtime was wired";
-        stream.push({ type: "error", reason: "error", error: output });
-        stream.end();
-        return;
-      }
+      const deps: GsdProviderDeps = await waitForProviderDeps() ?? {
+        getSupervisorConfig: () => ({}),
+        shouldBlockContextWrite: () => ({ block: false }),
+        getMilestoneId: () => null,
+        isDepthVerified: () => false,
+        getIsUnitDone: () => false,
+        onToolStart: () => {},
+        onToolEnd: () => {},
+        getBasePath: () => process.cwd(),
+        getUnitInfo: () => ({ unitType: "interactive", unitId: "session" }),
+      };
 
       const userPrompt = extractUserPrompt(context.messages);
       const gsdContext = {
