@@ -95,6 +95,31 @@ export interface GsdStreamContext {
   };
 }
 
+// ─── Plugin Lifecycle ────────────────────────────────────────────────────────
+
+/** Context passed to plugin lifecycle hooks during install/remove phases. */
+export interface PluginLifecycleContext {
+  source: string;
+  installedPath?: string;
+  scope: "user" | "project";
+  cwd: string;
+  interactive: boolean;
+  log(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+}
+
+/** Handler signature for plugin lifecycle hooks. */
+export type PluginLifecycleHandler = (ctx: PluginLifecycleContext) => Promise<void> | void;
+
+// ─── Plugin Runtime State ────────────────────────────────────────────────────
+
+/** Per-plugin runtime state, persisted to the plugin's own directory. */
+export interface PluginRuntimeState {
+  onboardingChecked: boolean;
+  onboardingPassed: boolean;
+}
+
 // ─── Provider Onboarding ─────────────────────────────────────────────────────
 
 export type CliCheckResult =
@@ -116,6 +141,9 @@ export type GsdProviderOnboarding = GsdProviderOnboardingExternalCli;
 export interface GsdProviderInfo {
   /** Provider ID — matches what's passed to pi.registerProvider(). */
   id: string;
+
+  /** Absolute path to the plugin's own directory. Used for plugin-owned state storage. */
+  pluginDir: string;
 
   /** Human-readable name for onboarding UI. */
   displayName: string;
@@ -155,4 +183,16 @@ export interface GsdProviderInfo {
     clack: unknown,
     pico: unknown,
   ) => Promise<boolean>;
+
+  /** Runs before the extension package is installed. */
+  beforeInstall?: PluginLifecycleHandler;
+
+  /** Runs after the extension package is installed and runtime deps are verified. */
+  afterInstall?: PluginLifecycleHandler;
+
+  /** Runs before the extension package is removed. */
+  beforeRemove?: PluginLifecycleHandler;
+
+  /** Runs after the extension package is removed. */
+  afterRemove?: PluginLifecycleHandler;
 }

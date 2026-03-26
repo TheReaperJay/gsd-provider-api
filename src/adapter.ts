@@ -17,8 +17,68 @@ import type {
   Message,
   StopReason,
 } from "@gsd/pi-ai";
-import type { GsdProviderInfo, GsdProviderDeps } from "./types.js";
+import type { GsdProviderInfo, GsdProviderDeps, PluginLifecycleHandler } from "./types.js";
 import { getRegisteredProviderInfos, waitForProviderDeps } from "./provider-registry.js";
+import { readPluginState, writePluginState } from "./plugin-state.js";
+import { runPluginOnboarding } from "./plugin-onboarding.js";
+
+const LIFECYCLE_PHASES = ["beforeInstall", "afterInstall", "beforeRemove", "afterRemove"] as const;
+type LifecyclePhase = typeof LIFECYCLE_PHASES[number];
+
+const PHASE_TO_REGISTRAR: Record<LifecyclePhase, string> = {
+  beforeInstall: "registerBeforeInstall",
+  afterInstall: "registerAfterInstall",
+  beforeRemove: "registerBeforeRemove",
+  afterRemove: "registerAfterRemove",
+};
+
+/**
+ * Register lifecycle hooks and session-start onboarding with Pi.
+ *
+ * Lifecycle hooks: for each provider and each phase, if the provider
+ * defines a handler, register it with Pi. No handler = no registration.
+ *
+ * Onboarding: on session_start, for each provider with an onboarding
+ * field, read the plugin's own .state.json. If onboarding hasn't passed
+ * yet, run the check and update the state file in the plugin's directory.
+ *
+ * The registrar methods (registerBeforeInstall, etc.) exist on the runtime
+ * ExtensionAPI object but are not yet in the published gsd-pi type
+ * declarations. Accessed via dynamic lookup until the types are updated.
+ */
+export function wireLifecycleHooks(pi: ExtensionAPI): void {
+  const piRuntime = pi as unknown as Record<string, (fn: (ctx: unknown) => Promise<void>) => void>;
+
+  for (const info of getRegisteredProviderInfos()) {
+    for (const phase of LIFECYCLE_PHASES) {
+      const handler: PluginLifecycleHandler | undefined = info[phase];
+      if (!handler) continue;
+
+      const registrarName = PHASE_TO_REGISTRAR[phase];
+      const registrar = piRuntime[registrarName];
+      if (typeof registrar !== "function") continue;
+
+      registrar.call(pi, async (ctx: unknown) => {
+        await handler(ctx as Parameters<PluginLifecycleHandler>[0]);
+      });
+    }
+  }
+
+  pi.on("session_start", async () => {
+    for (const info of getRegisteredProviderInfos()) {
+      if (!info.onboarding && !info.onboard) continue;
+
+      const state = readPluginState(info.pluginDir);
+      if (state.onboardingPassed) continue;
+
+      const { ok } = await runPluginOnboarding(info);
+      writePluginState(info.pluginDir, {
+        onboardingChecked: true,
+        onboardingPassed: ok,
+      });
+    }
+  });
+}
 
 function extractUserPrompt(messages: Message[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {

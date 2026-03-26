@@ -11,6 +11,9 @@ export type {
   GsdProviderOnboarding,
   GsdProviderOnboardingExternalCli,
   GsdProviderInfo,
+  PluginLifecycleContext,
+  PluginLifecycleHandler,
+  PluginRuntimeState,
 } from "./types.js";
 
 export {
@@ -33,8 +36,10 @@ export {
 
 export { defineGsdTool } from "./define-tool.js";
 
-export { wireProvidersToPI } from "./adapter.js";
+export { wireProvidersToPI, wireLifecycleHooks } from "./adapter.js";
 
 export { discoverLocalProviders } from "./local-discovery.js";
 
 export { runPluginOnboarding } from "./plugin-onboarding.js";
+
+export { readPluginState, writePluginState } from "./plugin-state.js";
