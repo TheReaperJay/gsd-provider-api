@@ -64,14 +64,14 @@ export function wireLifecycleHooks(pi: ExtensionAPI): void {
     }
   }
 
-  pi.on("session_start", async () => {
+  pi.on("session_start", async (_event: unknown, ctx: unknown) => {
     for (const info of getRegisteredProviderInfos()) {
       if (!info.onboarding && !info.onboard) continue;
 
       const state = readPluginState(info.pluginDir);
       if (state.onboardingPassed) continue;
 
-      const { ok } = await runPluginOnboarding(info);
+      const { ok } = await runPluginOnboarding(info, ctx as Parameters<typeof runPluginOnboarding>[1]);
       writePluginState(info.pluginDir, {
         onboardingChecked: true,
         onboardingPassed: ok,
