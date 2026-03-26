@@ -10,20 +10,24 @@
  *
  * When the check passes and the provider has models, the user is prompted
  * to set the provider as their default. Uses ctx.modelRegistry.find() to
- * look up the full Model object and ctx.setModel() to persist the choice.
+ * look up the full Model object and pi.setModel() to persist the choice.
  */
 
 import type { GsdProviderInfo } from "./types.js";
 import type pico from "picocolors";
 
-interface OnboardingContext {
-  modelRegistry: { find(provider: string, modelId: string): unknown };
+interface OnboardingPi {
   setModel(model: unknown, options?: { persist?: boolean }): Promise<boolean>;
+}
+
+interface OnboardingCtx {
+  modelRegistry: { find(provider: string, modelId: string): unknown };
 }
 
 async function promptSetDefault(
   pp: GsdProviderInfo,
-  ctx: OnboardingContext,
+  pi: OnboardingPi,
+  ctx: OnboardingCtx,
   p: typeof import("@clack/prompts"),
   pc: typeof pico,
 ): Promise<void> {
@@ -57,7 +61,7 @@ async function promptSetDefault(
     return;
   }
 
-  const success = await ctx.setModel(model, { persist: true });
+  const success = await pi.setModel(model, { persist: true });
   if (success) {
     p.log.info(`${pc.green("Default set to")} ${pp.models.find(m => m.id === selectedModelId)?.displayName ?? selectedModelId}`);
   } else {
@@ -67,7 +71,8 @@ async function promptSetDefault(
 
 export async function runPluginOnboarding(
   pp: GsdProviderInfo,
-  ctx: OnboardingContext,
+  pi: OnboardingPi,
+  ctx: OnboardingCtx,
 ): Promise<{ ok: boolean }> {
   const [p, picoModule] = await Promise.all([
     import("@clack/prompts"),
@@ -86,7 +91,7 @@ export async function runPluginOnboarding(
     const result = pp.onboarding.check();
     if (result.ok) {
       s.stop(`${pc.green(pp.displayName)} authenticated${result.email ? ` as ${result.email}` : ""}`);
-      await promptSetDefault(pp, ctx, p, pc);
+      await promptSetDefault(pp, pi, ctx, p, pc);
       return { ok: true };
     }
     s.stop(`${pp.displayName}: ${result.reason}`);
@@ -95,7 +100,7 @@ export async function runPluginOnboarding(
   }
 
   p.log.info(`${pc.green(pp.displayName)} installed.`);
-  await promptSetDefault(pp, ctx, p, pc);
+  await promptSetDefault(pp, pi, ctx, p, pc);
 
   return { ok: true };
 }

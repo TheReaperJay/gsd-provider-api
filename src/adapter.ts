@@ -71,7 +71,11 @@ export function wireLifecycleHooks(pi: ExtensionAPI): void {
       const state = readPluginState(info.pluginDir);
       if (state.onboardingPassed) continue;
 
-      const { ok } = await runPluginOnboarding(info, ctx as Parameters<typeof runPluginOnboarding>[1]);
+      const { ok } = await runPluginOnboarding(
+        info,
+        pi as unknown as Parameters<typeof runPluginOnboarding>[1],
+        ctx as Parameters<typeof runPluginOnboarding>[2],
+      );
       writePluginState(info.pluginDir, {
         onboardingChecked: true,
         onboardingPassed: ok,
