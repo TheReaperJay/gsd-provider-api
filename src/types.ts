@@ -16,8 +16,13 @@ export type ProviderAuthMode = "apiKey" | "oauth" | "externalCli" | "none";
 export interface GsdToolDef {
   name: string;
   description: string;
-  schema: Record<string, z.ZodTypeAny>;
-  execute: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: "text"; text: string }> }>;
+  // Either a Zod raw shape or a plain JSON-schema-like object.
+  schema: Record<string, z.ZodTypeAny> | Record<string, unknown>;
+  // "extra" allows provider-specific execution context (e.g. AbortSignal).
+  execute: (
+    args: Record<string, unknown>,
+    extra?: unknown,
+  ) => Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean; [key: string]: unknown }>;
 }
 
 /**
