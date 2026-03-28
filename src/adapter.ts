@@ -32,6 +32,98 @@ const PHASE_TO_REGISTRAR: Record<LifecyclePhase, string> = {
   afterRemove: "registerAfterRemove",
 };
 
+type SessionNameApi = {
+  get: () => string | undefined;
+  set: (name: string) => void;
+};
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function readAbortSignal(extra: unknown): AbortSignal | undefined {
+  if (!extra || typeof extra !== "object") return undefined;
+  const maybeSignal = (extra as Record<string, unknown>).signal;
+  return maybeSignal instanceof AbortSignal ? maybeSignal : undefined;
+}
+
+function readToolCallId(extra: unknown): string {
+  if (!extra || typeof extra !== "object") {
+    return `mcp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+  const maybeId = (extra as Record<string, unknown>).toolCallId;
+  if (typeof maybeId === "string" && maybeId.trim().length > 0) {
+    return maybeId;
+  }
+  return `mcp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeToolResult(raw: unknown): { content: Array<{ type: "text"; text: string }>; isError?: boolean } {
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    const content = obj.content;
+    if (Array.isArray(content)) {
+      const normalized = content.map((part) => {
+        if (part && typeof part === "object") {
+          const p = part as Record<string, unknown>;
+          if (p.type === "text" && typeof p.text === "string") {
+            return { type: "text" as const, text: p.text };
+          }
+        }
+        return { type: "text" as const, text: String(part ?? "") };
+      });
+      return { content: normalized, isError: obj.isError === true };
+    }
+  }
+  return { content: [{ type: "text", text: typeof raw === "string" ? raw : JSON.stringify(raw) }] };
+}
+
+type ContextGsdTool = NonNullable<GsdStreamContext["tools"]>[number];
+
+function extractGsdToolsFromContext(tools: unknown): GsdStreamContext["tools"] {
+  if (!Array.isArray(tools)) return undefined;
+
+  const mapped = tools
+    .map((tool): ContextGsdTool | null => {
+      const record = toRecord(tool);
+      const name = typeof record.name === "string" ? record.name : "";
+      if (!name.startsWith("gsd_")) return null;
+
+      const description =
+        typeof record.description === "string" && record.description.trim().length > 0
+          ? record.description
+          : name;
+      const schema = toRecord(record.parameters);
+      const executeImpl = typeof record.execute === "function"
+        ? record.execute as (
+          toolCallId: string,
+          params: Record<string, unknown>,
+          signal?: AbortSignal,
+          onUpdate?: unknown,
+        ) => Promise<unknown>
+        : null;
+      if (!executeImpl) return null;
+
+      return {
+        name,
+        description,
+        schema,
+        execute: async (args: Record<string, unknown>, extra?: unknown) => {
+          const raw = await executeImpl(
+            readToolCallId(extra),
+            args,
+            readAbortSignal(extra),
+            undefined,
+          );
+          return normalizeToolResult(raw);
+        },
+      };
+    })
+    .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+
+  return mapped.length > 0 ? mapped : undefined;
+}
+
 /**
  * Register lifecycle hooks and session-start onboarding with Pi.
  *
@@ -100,9 +192,64 @@ function extractUserPrompt(messages: Message[]): string {
   return "";
 }
 
+function normalizeSessionName(input: string): string {
+  return input.replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+function extractMessageText(message: Message): string {
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .map((block) => {
+      if (!block || typeof block !== "object") return "";
+      const part = block as Record<string, unknown>;
+      if (typeof part.text === "string") return part.text;
+      if (typeof part.content === "string") return part.content;
+      return "";
+    })
+    .filter((part) => part.length > 0)
+    .join("\n");
+}
+
+function deriveSessionName(userPrompt: string, messages: Message[], providerLabel: string): string {
+  const fromUser = normalizeSessionName(userPrompt);
+  if (fromUser.length > 0) return fromUser;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const text = extractMessageText(messages[i]!);
+    if (!text) continue;
+    const unitMatch = text.match(/^\s*##\s*UNIT:\s*(.+)$/im);
+    if (unitMatch?.[1]) {
+      const normalized = normalizeSessionName(unitMatch[1]);
+      if (normalized.length > 0) return normalized;
+    }
+  }
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const normalized = normalizeSessionName(extractMessageText(messages[i]!));
+    if (normalized.length > 0) return normalized;
+  }
+
+  return normalizeSessionName(providerLabel) || "Session";
+}
+
+function ensureSessionHasName(sessionNameApi: SessionNameApi, candidateName: string): void {
+  if (candidateName.trim().length === 0) return;
+  try {
+    const existing = sessionNameApi.get();
+    if (typeof existing === "string" && existing.trim().length > 0) return;
+    sessionNameApi.set(candidateName);
+  } catch {
+    // Non-fatal: session naming is best-effort metadata.
+  }
+}
+
 function createStreamSimple(
   info: GsdProviderInfo,
   getCtx: () => ExtensionContext | null,
+  sessionNameApi: SessionNameApi,
   StreamClass: new () => AssistantMessageEventStream,
 ): (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream {
   return function streamSimple(
@@ -144,14 +291,18 @@ function createStreamSimple(
       };
 
       const userPrompt = extractUserPrompt(context.messages);
+      const gsdTools = extractGsdToolsFromContext((context as unknown as { tools?: unknown }).tools);
       const gsdContext: GsdStreamContext = {
         modelId: model.id,
         systemPrompt: context.systemPrompt ?? "",
         userPrompt,
         messages: context.messages,
         signal: options?.signal,
+        tools: gsdTools,
         supervisorConfig: deps.getSupervisorConfig(),
       };
+
+      ensureSessionHasName(sessionNameApi, deriveSessionName(userPrompt, context.messages, info.displayName));
 
       stream.push({ type: "start", partial: output });
 
@@ -297,6 +448,23 @@ export async function wireProvidersToPI(pi: ExtensionAPI): Promise<void> {
   pi.on("agent_start", async (_event, ctx) => { currentCtx = ctx; });
   pi.on("agent_end", async () => { currentCtx = null; });
 
+  const sessionNameApi: SessionNameApi = {
+    get: () => {
+      try {
+        return pi.getSessionName();
+      } catch {
+        return undefined;
+      }
+    },
+    set: (name: string) => {
+      try {
+        pi.setSessionName(name);
+      } catch {
+        // best-effort only
+      }
+    },
+  };
+
   for (const info of getRegisteredProviderInfos()) {
     const apiId = (info.api ?? info.id) as Api;
     const baseUrl = info.baseUrl ?? `${info.id}:`;
@@ -310,7 +478,7 @@ export async function wireProvidersToPI(pi: ExtensionAPI): Promise<void> {
       contextWindow: m.contextWindow,
       maxTokens: m.maxTokens,
     }));
-    const streamSimple = createStreamSimple(info, () => currentCtx, piAi.AssistantMessageEventStream);
+    const streamSimple = createStreamSimple(info, () => currentCtx, sessionNameApi, piAi.AssistantMessageEventStream);
 
     pi.registerProvider(info.id, {
       authMode: info.authMode,
