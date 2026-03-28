@@ -17,7 +17,7 @@ import type {
   Message,
   StopReason,
 } from "@gsd/pi-ai";
-import type { GsdProviderInfo, GsdProviderDeps, PluginLifecycleHandler } from "./types.js";
+import type { GsdProviderInfo, GsdProviderDeps, GsdStreamContext, PluginLifecycleHandler } from "./types.js";
 import { getRegisteredProviderInfos, waitForProviderDeps, getProviderDeps, setProviderDeps } from "./provider-registry.js";
 import { readPluginState, writePluginState } from "./plugin-state.js";
 import { runPluginOnboarding } from "./plugin-onboarding.js";
@@ -144,10 +144,12 @@ function createStreamSimple(
       };
 
       const userPrompt = extractUserPrompt(context.messages);
-      const gsdContext = {
+      const gsdContext: GsdStreamContext = {
         modelId: model.id,
         systemPrompt: context.systemPrompt ?? "",
         userPrompt,
+        messages: context.messages,
+        signal: options?.signal,
         supervisorConfig: deps.getSupervisorConfig(),
       };
 

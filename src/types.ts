@@ -7,6 +7,7 @@
 
 import type { z } from "zod";
 import type { spawnSync } from "node:child_process";
+import type { Message } from "@gsd/pi-ai";
 
 /** Matches core provider auth semantics exactly. */
 export type ProviderAuthMode = "apiKey" | "oauth" | "externalCli" | "none";
@@ -87,6 +88,9 @@ export interface GsdStreamContext {
   modelId: string;
   systemPrompt: string;
   userPrompt: string;
+  messages: Message[];
+  /** Abort signal from Pi streamSimple options (e.g. user pressed Esc). */
+  signal?: AbortSignal;
   tools?: GsdToolDef[];
   supervisorConfig: {
     soft_timeout_minutes?: number;
