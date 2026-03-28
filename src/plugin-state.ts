@@ -15,10 +15,19 @@ function defaultState(): PluginRuntimeState {
   return { onboardingChecked: false, onboardingPassed: false };
 }
 
+function normalizePluginDir(pluginDir: string): string | null {
+  if (typeof pluginDir !== "string") return null;
+  const trimmed = pluginDir.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /** Read the plugin's runtime state from its own directory. Returns defaults if no state file exists. */
 export function readPluginState(pluginDir: string): PluginRuntimeState {
+  const normalizedDir = normalizePluginDir(pluginDir);
+  if (!normalizedDir) return defaultState();
+
   try {
-    const raw = readFileSync(join(pluginDir, STATE_FILENAME), "utf-8");
+    const raw = readFileSync(join(normalizedDir, STATE_FILENAME), "utf-8");
     const parsed = JSON.parse(raw) as Partial<PluginRuntimeState>;
     return {
       onboardingChecked: parsed.onboardingChecked === true,
@@ -29,10 +38,13 @@ export function readPluginState(pluginDir: string): PluginRuntimeState {
   }
 }
 
-/** Write the plugin's runtime state to its own directory. Merges with existing state. */
+/** Write the plugin's runtime state to its own directory. Merges with existing state. No-op for invalid pluginDir input. */
 export function writePluginState(pluginDir: string, update: Partial<PluginRuntimeState>): void {
+  const normalizedDir = normalizePluginDir(pluginDir);
+  if (!normalizedDir) return;
+
   const current = readPluginState(pluginDir);
   const merged: PluginRuntimeState = { ...current, ...update };
-  mkdirSync(pluginDir, { recursive: true });
-  writeFileSync(join(pluginDir, STATE_FILENAME), JSON.stringify(merged, null, 2) + "\n", "utf-8");
+  mkdirSync(normalizedDir, { recursive: true });
+  writeFileSync(join(normalizedDir, STATE_FILENAME), JSON.stringify(merged, null, 2) + "\n", "utf-8");
 }
