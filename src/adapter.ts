@@ -32,6 +32,9 @@ const PHASE_TO_REGISTRAR: Record<LifecyclePhase, string> = {
   afterRemove: "registerAfterRemove",
 };
 
+const LIFECYCLE_HOOKS_PATCHED_KEY = Symbol.for("gsd-provider-api-lifecycle-hooks-patched");
+const PROVIDERS_WIRED_KEY = Symbol.for("gsd-provider-api-providers-wired");
+
 type SessionNameApi = {
   get: () => string | undefined;
   set: (name: string) => void;
@@ -139,6 +142,10 @@ function extractGsdToolsFromContext(tools: unknown): GsdStreamContext["tools"] {
  * declarations. Accessed via dynamic lookup until the types are updated.
  */
 export function wireLifecycleHooks(pi: ExtensionAPI): void {
+  const runtime = pi as unknown as Record<symbol, unknown>;
+  if (runtime[LIFECYCLE_HOOKS_PATCHED_KEY]) return;
+  runtime[LIFECYCLE_HOOKS_PATCHED_KEY] = true;
+
   const piRuntime = pi as unknown as Record<string, (fn: (ctx: unknown) => Promise<void>) => void>;
 
   for (const info of getRegisteredProviderInfos()) {
@@ -442,6 +449,10 @@ function createStreamSimple(
 
 /** Wire all registered providers to Pi. */
 export async function wireProvidersToPI(pi: ExtensionAPI): Promise<void> {
+  const runtime = pi as unknown as Record<symbol, unknown>;
+  if (runtime[PROVIDERS_WIRED_KEY]) return;
+  runtime[PROVIDERS_WIRED_KEY] = true;
+
   const piAi = await import("@gsd/pi-ai");
 
   let currentCtx: ExtensionContext | null = null;
