@@ -16,8 +16,15 @@ import type {
   TextContent,
   Message,
   StopReason,
+  ToolCall,
 } from "@gsd/pi-ai";
-import type { GsdProviderInfo, GsdProviderDeps, GsdStreamContext, PluginLifecycleHandler } from "./types.js";
+import type {
+  GsdProviderInfo,
+  GsdProviderDeps,
+  GsdStreamContext,
+  PluginLifecycleHandler,
+  GsdToolResultPayload,
+} from "./types.js";
 import { getRegisteredProviderInfos, waitForProviderDeps, getProviderDeps, setProviderDeps } from "./provider-registry.js";
 import { readPluginState, writePluginState } from "./plugin-state.js";
 import { runPluginOnboarding } from "./plugin-onboarding.js";
@@ -34,6 +41,7 @@ const PHASE_TO_REGISTRAR: Record<LifecyclePhase, string> = {
 
 const LIFECYCLE_HOOKS_PATCHED_KEY = Symbol.for("gsd-provider-api-lifecycle-hooks-patched");
 const PROVIDERS_WIRED_KEY = Symbol.for("gsd-provider-api-providers-wired");
+const EXTERNAL_TOOL_RESULT_KEY = "externalResult";
 
 type SessionNameApi = {
   get: () => string | undefined;
@@ -253,6 +261,30 @@ function ensureSessionHasName(sessionNameApi: SessionNameApi, candidateName: str
   }
 }
 
+type MutableToolCall = ToolCall & Record<string, unknown>;
+
+function parseToolCallArguments(raw: string): Record<string, unknown> | null {
+  if (raw.trim().length === 0) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function asToolCallContent(value: unknown): MutableToolCall | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (record.type !== "toolCall") return null;
+  if (typeof record.id !== "string" || typeof record.name !== "string") return null;
+  if (!record.arguments || typeof record.arguments !== "object" || Array.isArray(record.arguments)) {
+    record.arguments = {};
+  }
+  return record as MutableToolCall;
+}
+
 function createStreamSimple(
   info: GsdProviderInfo,
   getCtx: () => ExtensionContext | null,
@@ -315,7 +347,72 @@ function createStreamSimple(
 
       let activeContentIndex = -1;
       let activeThinkingIndex = -1;
+      let activeToolStatusId: string | null = null;
       let ended = false;
+      const toolCallIndexById = new Map<string, number>();
+      const toolCallArgsBufferById = new Map<string, string>();
+      const pendingToolResultsById = new Map<string, { toolName: string; result: GsdToolResultPayload }>();
+
+      function clearToolStatus(toolCallId?: string): void {
+        if (activeToolStatusId === null) return;
+        if (toolCallId && activeToolStatusId !== toolCallId) return;
+        const ctx = getCtx();
+        if (ctx) ctx.ui.setStatus(`${info.id}-tool`, undefined);
+        activeToolStatusId = null;
+      }
+
+      function setToolStatus(toolCallId: string, toolName: string, detail?: string): void {
+        const ctx = getCtx();
+        if (!ctx) return;
+        const statusText = detail
+          ? `${toolName.toLowerCase()}: ${detail}`
+          : toolName.toLowerCase();
+        ctx.ui.setStatus(`${info.id}-tool`, statusText);
+        activeToolStatusId = toolCallId;
+      }
+
+      function attachToolResult(toolCallId: string, toolName: string, result: GsdToolResultPayload): void {
+        const existingIndex = toolCallIndexById.get(toolCallId);
+        if (existingIndex === undefined) {
+          pendingToolResultsById.set(toolCallId, { toolName, result });
+          return;
+        }
+        const block = asToolCallContent(output.content[existingIndex]);
+        if (!block) return;
+        block[EXTERNAL_TOOL_RESULT_KEY] = result;
+      }
+
+      function ensureToolCall(toolCallId: string, toolName?: string): { index: number; block: MutableToolCall } {
+        const pending = pendingToolResultsById.get(toolCallId);
+        const existingIndex = toolCallIndexById.get(toolCallId);
+        if (existingIndex !== undefined) {
+          const existing = asToolCallContent(output.content[existingIndex]);
+          if (existing) {
+            const resolvedToolName = toolName || pending?.toolName;
+            if (resolvedToolName && existing.name !== resolvedToolName) existing.name = resolvedToolName;
+            return { index: existingIndex, block: existing };
+          }
+          toolCallIndexById.delete(toolCallId);
+        }
+
+        const toolCall: MutableToolCall = {
+          type: "toolCall",
+          id: toolCallId,
+          name: (toolName && toolName.trim().length > 0 ? toolName : pending?.toolName) || "tool",
+          arguments: {},
+        };
+        output.content.push(toolCall as unknown as AssistantMessage["content"][number]);
+        const index = output.content.length - 1;
+        toolCallIndexById.set(toolCallId, index);
+        stream.push({ type: "toolcall_start", contentIndex: index, partial: output });
+
+        if (pending) {
+          toolCall[EXTERNAL_TOOL_RESULT_KEY] = pending.result;
+          pendingToolResultsById.delete(toolCallId);
+        }
+
+        return { index, block: toolCall };
+      }
 
       try {
         const gsdStream = info.createStream(gsdContext, deps);
@@ -347,20 +444,44 @@ function createStreamSimple(
               break;
             }
 
-            case "tool_start": {
-              const ctx = getCtx();
-              if (ctx) {
-                const statusText = event.detail
-                  ? `${event.toolName.toLowerCase()}: ${event.detail}`
-                  : event.toolName.toLowerCase();
-                ctx.ui.setStatus(`${info.id}-tool`, statusText);
-              }
+            case "tool_call_start": {
+              ensureToolCall(event.toolCallId, event.toolName);
+              setToolStatus(event.toolCallId, event.toolName, event.detail);
               break;
             }
 
-            case "tool_end": {
-              const ctx = getCtx();
-              if (ctx) ctx.ui.setStatus(`${info.id}-tool`, undefined);
+            case "tool_call_delta": {
+              const { index, block } = ensureToolCall(event.toolCallId);
+              const current = toolCallArgsBufferById.get(event.toolCallId) ?? "";
+              const next = current + event.delta;
+              toolCallArgsBufferById.set(event.toolCallId, next);
+
+              const parsedArgs = parseToolCallArguments(next);
+              if (parsedArgs) {
+                block.arguments = parsedArgs;
+              }
+              stream.push({ type: "toolcall_delta", contentIndex: index, delta: event.delta, partial: output });
+              break;
+            }
+
+            case "tool_call_end": {
+              const { index, block } = ensureToolCall(event.toolCallId);
+              const bufferedArgs = toolCallArgsBufferById.get(event.toolCallId);
+              if (bufferedArgs !== undefined) {
+                const parsedArgs = parseToolCallArguments(bufferedArgs);
+                if (parsedArgs) {
+                  block.arguments = parsedArgs;
+                }
+              }
+              stream.push({ type: "toolcall_end", contentIndex: index, toolCall: block, partial: output });
+              clearToolStatus(event.toolCallId);
+              toolCallArgsBufferById.delete(event.toolCallId);
+              break;
+            }
+
+            case "tool_result": {
+              attachToolResult(event.toolCallId, event.toolName, event.result);
+              clearToolStatus(event.toolCallId);
               break;
             }
 
@@ -393,6 +514,7 @@ function createStreamSimple(
                 reason: output.stopReason as Extract<StopReason, "stop" | "length" | "toolUse">,
                 message: output,
               });
+              clearToolStatus();
               stream.end();
               ended = true;
               break;
@@ -414,6 +536,7 @@ function createStreamSimple(
               output.stopReason = "error";
               output.errorMessage = event.message;
               stream.push({ type: "error", reason: "error", error: output });
+              clearToolStatus();
               stream.end();
               ended = true;
               break;
@@ -433,12 +556,14 @@ function createStreamSimple(
             stream.push({ type: "thinking_end", contentIndex: activeThinkingIndex, content: thinkText, partial: output });
           }
           stream.push({ type: "done", reason: "stop", message: output });
+          clearToolStatus();
           stream.end();
         }
       } catch (err) {
         output.stopReason = options?.signal?.aborted ? "aborted" : "error";
         output.errorMessage = err instanceof Error ? err.message : String(err);
         stream.push({ type: "error", reason: output.stopReason as "aborted" | "error", error: output });
+        clearToolStatus();
         stream.end();
       }
     })();

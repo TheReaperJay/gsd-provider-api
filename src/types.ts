@@ -61,14 +61,32 @@ export interface GsdUsage {
   cacheWriteTokens?: number;
 }
 
+/** Tool result payload shared by external provider streams. */
+export interface GsdToolResultPart {
+  type: string;
+  text?: string;
+  data?: string;
+  mimeType?: string;
+  [key: string]: unknown;
+}
+
+/** Canonical result shape for executed tools in provider streams. */
+export interface GsdToolResultPayload {
+  content: GsdToolResultPart[];
+  isError: boolean;
+  details?: unknown;
+}
+
 // ─── Events ──────────────────────────────────────────────────────────────────
 
 /** Discriminated union of all events emitted by a provider stream. */
 export type GsdEvent =
   | { type: "text_delta"; text: string }
   | { type: "thinking_delta"; thinking: string }
-  | { type: "tool_start"; toolCallId: string; toolName: string; detail?: string }
-  | { type: "tool_end"; toolCallId: string }
+  | { type: "tool_call_start"; toolCallId: string; toolName: string; detail?: string }
+  | { type: "tool_call_delta"; toolCallId: string; delta: string }
+  | { type: "tool_call_end"; toolCallId: string }
+  | { type: "tool_result"; toolCallId: string; toolName: string; result: GsdToolResultPayload }
   | { type: "completion"; usage: GsdUsage; stopReason: string }
   | { type: "error"; message: string; category: "rate_limit" | "auth" | "timeout" | "unknown"; retryAfterMs?: number };
 

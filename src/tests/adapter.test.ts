@@ -143,11 +143,11 @@ describe("adapter", () => {
   });
 
   describe("TUI tool status", () => {
-    it("sets TUI status on tool_start event with detail", async () => {
+    it("sets TUI status on tool_call_start event with detail", async () => {
       const id = `tui-stub-${Date.now()}`;
       registerProviderInfo(makeTestProvider(id, [
-        { type: "tool_start", toolCallId: "c1", toolName: "Bash", detail: "ls -la" },
-        { type: "tool_end", toolCallId: "c1" },
+        { type: "tool_call_start", toolCallId: "c1", toolName: "Bash", detail: "ls -la" },
+        { type: "tool_call_end", toolCallId: "c1" },
         { type: "completion", usage: { inputTokens: 1, outputTokens: 1 }, stopReason: "stop" },
       ]));
       setProviderDeps(createMockDeps());
@@ -179,18 +179,18 @@ describe("adapter", () => {
       await collectEvents(stream);
 
       const setCall = statusCalls.find(c => c.text !== undefined);
-      assert.ok(setCall, "ctx.ui.setStatus must be called on tool_start");
+      assert.ok(setCall, "ctx.ui.setStatus must be called on tool_call_start");
       assert.ok(setCall.text!.includes("bash"), "status text must include tool name");
       assert.ok(setCall.text!.includes("ls -la"), "status text must include detail");
     });
   });
 
   describe("TUI tool status clear", () => {
-    it("clears TUI status on tool_end event", async () => {
+    it("clears TUI status on tool_call_end event", async () => {
       const id = `tui-clear-stub-${Date.now()}`;
       registerProviderInfo(makeTestProvider(id, [
-        { type: "tool_start", toolCallId: "c1", toolName: "Read" },
-        { type: "tool_end", toolCallId: "c1" },
+        { type: "tool_call_start", toolCallId: "c1", toolName: "Read" },
+        { type: "tool_call_end", toolCallId: "c1" },
         { type: "completion", usage: { inputTokens: 1, outputTokens: 1 }, stopReason: "stop" },
       ]));
       setProviderDeps(createMockDeps());
@@ -221,18 +221,19 @@ describe("adapter", () => {
       await collectEvents(stream);
 
       const clearCall = statusCalls.find(c => c.text === undefined);
-      assert.ok(clearCall, "ctx.ui.setStatus must be called with undefined on tool_end (clears status)");
+      assert.ok(clearCall, "ctx.ui.setStatus must be called with undefined on tool_call_end (clears status)");
       assert.equal(clearCall.key, `${id}-tool`, "clear call key must be {provider-id}-tool");
     });
   });
 
-  describe("tool events not forwarded", () => {
-    it("does not push tool_start or tool_end to Pi stream", async () => {
-      const id = `no-fwd-stub-${Date.now()}`;
+  describe("tool events forwarded", () => {
+    it("pushes toolcall_start/toolcall_delta/toolcall_end to Pi stream", async () => {
+      const id = `fwd-stub-${Date.now()}`;
       registerProviderInfo(makeTestProvider(id, [
-        { type: "tool_start", toolCallId: "c1", toolName: "Bash" },
+        { type: "tool_call_start", toolCallId: "c1", toolName: "Bash" },
+        { type: "tool_call_delta", toolCallId: "c1", delta: "{\"command\":\"ls -la\"}" },
+        { type: "tool_call_end", toolCallId: "c1" },
         { type: "text_delta", text: "output" },
-        { type: "tool_end", toolCallId: "c1" },
         { type: "completion", usage: { inputTokens: 1, outputTokens: 1 }, stopReason: "stop" },
       ]));
       setProviderDeps(createMockDeps());
@@ -246,8 +247,9 @@ describe("adapter", () => {
       const events = await collectEvents(stream);
 
       const rawEvents = events as Array<{ type: string }>;
-      assert.ok(!rawEvents.some(e => e.type === "tool_start"), "tool_start must NOT appear in Pi stream");
-      assert.ok(!rawEvents.some(e => e.type === "tool_end"), "tool_end must NOT appear in Pi stream");
+      assert.ok(rawEvents.some(e => e.type === "toolcall_start"), "toolcall_start must appear in Pi stream");
+      assert.ok(rawEvents.some(e => e.type === "toolcall_delta"), "toolcall_delta must appear in Pi stream");
+      assert.ok(rawEvents.some(e => e.type === "toolcall_end"), "toolcall_end must appear in Pi stream");
     });
   });
 

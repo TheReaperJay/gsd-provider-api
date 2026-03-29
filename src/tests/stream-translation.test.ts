@@ -142,6 +142,42 @@ describe("stream translation", () => {
     assert.ok(textEndEvent, "text_end must be emitted on completion");
   });
 
+  it("keeps tool_result out of assistant text and attaches it to the tool call block", async () => {
+    const toolResult = {
+      content: [{ type: "text", text: "/tmp/project\n" }],
+      isError: false,
+      details: { exitCode: 0 },
+    };
+
+    const events = await runEvents([
+      { type: "tool_call_start", toolCallId: "c1", toolName: "Bash" },
+      { type: "tool_call_delta", toolCallId: "c1", delta: "{\"command\":\"pwd\"}" },
+      { type: "tool_call_end", toolCallId: "c1" },
+      { type: "tool_result", toolCallId: "c1", toolName: "Bash", result: toolResult },
+      { type: "text_delta", text: "final answer" },
+      { type: "completion", usage: { inputTokens: 10, outputTokens: 5 }, stopReason: "stop" },
+    ]);
+
+    const textDeltaEvents = events.filter(
+      (e): e is Extract<AssistantMessageEvent, { type: "text_delta" }> => e.type === "text_delta",
+    );
+    assert.equal(textDeltaEvents.length, 1, "only final assistant text should be emitted as text_delta");
+    assert.equal(textDeltaEvents[0]?.delta, "final answer");
+
+    const doneEvent = events.find(
+      (e): e is Extract<AssistantMessageEvent, { type: "done" }> => e.type === "done",
+    );
+    assert.ok(doneEvent, "done event must be emitted");
+
+    const toolCall = doneEvent.message.content.find(
+      (c): c is { type: "toolCall"; id: string; name: string; arguments: Record<string, unknown>; externalResult?: unknown } =>
+        c.type === "toolCall" && c.id === "c1",
+    );
+    assert.ok(toolCall, "tool call must exist in final assistant message content");
+    assert.equal(toolCall.arguments.command, "pwd", "tool call args must be assembled from tool_call_delta");
+    assert.deepEqual(toolCall.externalResult, toolResult, "tool_result payload must be attached to tool call");
+  });
+
   describe("completion event translation", () => {
     it("translates completion GsdEvent to Pi text_end + done events with usage", async () => {
       const events = await runEvents([

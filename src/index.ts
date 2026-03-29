@@ -3,6 +3,8 @@ export type {
   GsdToolDef,
   GsdProviderDeps,
   GsdUsage,
+  GsdToolResultPart,
+  GsdToolResultPayload,
   GsdEvent,
   GsdEventStream,
   GsdModel,
