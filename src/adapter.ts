@@ -474,6 +474,11 @@ function createStreamSimple(
               break;
             }
 
+            case "thinking_end": {
+              closeThinkingBlock();
+              break;
+            }
+
             case "progress_delta": {
               setProgressStatus(event.text);
               break;

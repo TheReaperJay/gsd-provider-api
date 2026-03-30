@@ -169,6 +169,20 @@ describe("stream translation", () => {
       "thinking block must close before toolcall_start");
   });
 
+  it("supports provider-forced thinking block boundaries via thinking_end", async () => {
+    const events = await runEvents([
+      { type: "thinking_delta", thinking: "phase 1" },
+      { type: "thinking_end" },
+      { type: "thinking_delta", thinking: "phase 2" },
+      { type: "completion", usage: { inputTokens: 1, outputTokens: 1 }, stopReason: "stop" },
+    ]);
+
+    const thinkingStarts = events.filter(e => e.type === "thinking_start");
+    const thinkingEnds = events.filter(e => e.type === "thinking_end");
+    assert.equal(thinkingStarts.length, 2, "thinking_end should force a new thinking block");
+    assert.equal(thinkingEnds.length, 2, "both thinking blocks should be closed");
+  });
+
   it("keeps tool_result out of assistant text and attaches it to the tool call block", async () => {
     const toolResult = {
       content: [{ type: "text", text: "/tmp/project\n" }],
