@@ -1,6 +1,6 @@
 {
   "name": "@thereaperjay/gsd-provider-api",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Provider contracts, registries, discovery, onboarding, and Pi adapter for GSD-compatible provider extensions",
   "license": "MIT",
   "repository": {

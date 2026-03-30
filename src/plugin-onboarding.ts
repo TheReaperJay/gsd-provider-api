@@ -36,6 +36,13 @@ function markDefaultPromptSeen(providerId: string): boolean {
   return true;
 }
 
+function clearConfirmAnswerEchoLine(output: NodeJS.WriteStream = process.stdout): void {
+  if (!output.isTTY) return;
+  output.write("\u001B[1A");
+  output.write("\u001B[2K");
+  output.write("\u001B[1G");
+}
+
 async function promptSetDefault(
   pp: GsdProviderInfo,
   pi: OnboardingPi,
@@ -49,6 +56,7 @@ async function promptSetDefault(
   const shouldSet = await p.confirm({
     message: `Set ${pp.displayName} as your default provider?`,
   });
+  clearConfirmAnswerEchoLine();
 
   if (p.isCancel(shouldSet) || !shouldSet) return;
 
