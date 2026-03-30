@@ -16,7 +16,7 @@ This package fills that gap.
 
 2. **Defines a stable provider contract.** You implement `GsdProviderInfo` — a single interface that describes your provider's identity, models, auth mode, and a `createStream()` function. That's the entire surface area you need to touch.
 
-3. **Translates your stream into Pi's event format.** Your `createStream()` yields simple `GsdEvent` objects (`text_delta`, `thinking_delta`, `tool_call_*`, `tool_result`, `completion`, `error`). The adapter converts these into Pi's `AssistantMessageEventStream` so the vendored fork's orchestration layer consumes them like any native provider.
+3. **Translates your stream into Pi's event format.** Your `createStream()` yields simple `GsdEvent` objects (`text_delta`, `thinking_delta`, `progress_delta`, `tool_call_*`, `tool_result`, `completion`, `error`). The adapter converts these into Pi's `AssistantMessageEventStream` so the vendored fork's orchestration layer consumes them like any native provider.
 
 4. **Shares runtime state without compile-time coupling.** GSD orchestration publishes supervisor config, tool definitions, and context callbacks via process-global symbols. Your provider consumes them through this package's registry APIs. No direct imports from GSD internals.
 
@@ -147,6 +147,7 @@ Your `createStream()` yields these events:
 |---|---|---|
 | `text_delta` | `text: string` | Streamed text output |
 | `thinking_delta` | `thinking: string` | Streamed reasoning/thinking output |
+| `progress_delta` | `text: string` | Ephemeral progress/status text (UI status channel, not transcript) |
 | `tool_call_start` | `toolCallId`, `toolName`, `detail?` | Starts a tool call block |
 | `tool_call_delta` | `toolCallId`, `delta` | Streams tool arguments JSON |
 | `tool_call_end` | `toolCallId` | Ends the tool call block |

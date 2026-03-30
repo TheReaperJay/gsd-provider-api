@@ -348,6 +348,7 @@ function createStreamSimple(
       let activeContentIndex = -1;
       let activeThinkingIndex = -1;
       let activeToolStatusId: string | null = null;
+      let hasProgressStatus = false;
       let ended = false;
       const toolCallIndexById = new Map<string, number>();
       const toolCallArgsBufferById = new Map<string, string>();
@@ -369,6 +370,25 @@ function createStreamSimple(
           : toolName.toLowerCase();
         ctx.ui.setStatus(`${info.id}-tool`, statusText);
         activeToolStatusId = toolCallId;
+      }
+
+      function clearProgressStatus(): void {
+        if (!hasProgressStatus) return;
+        const ctx = getCtx();
+        if (ctx) ctx.ui.setStatus(`${info.id}-progress`, undefined);
+        hasProgressStatus = false;
+      }
+
+      function setProgressStatus(text: string): void {
+        const ctx = getCtx();
+        if (!ctx) return;
+        const normalized = text.replace(/\s+/g, " ").trim();
+        if (normalized.length === 0) {
+          clearProgressStatus();
+          return;
+        }
+        ctx.ui.setStatus(`${info.id}-progress`, normalized);
+        hasProgressStatus = true;
       }
 
       function attachToolResult(toolCallId: string, toolName: string, result: GsdToolResultPayload): void {
@@ -420,6 +440,7 @@ function createStreamSimple(
         for await (const event of gsdStream) {
           switch (event.type) {
             case "text_delta": {
+              clearProgressStatus();
               if (activeContentIndex === -1) {
                 const textBlock: TextContent = { type: "text", text: "" };
                 output.content.push(textBlock);
@@ -441,6 +462,11 @@ function createStreamSimple(
               const thinkBlock = output.content[activeThinkingIndex];
               if (thinkBlock && thinkBlock.type === "thinking") thinkBlock.thinking += event.thinking;
               stream.push({ type: "thinking_delta", contentIndex: activeThinkingIndex, delta: event.thinking, partial: output });
+              break;
+            }
+
+            case "progress_delta": {
+              setProgressStatus(event.text);
               break;
             }
 
@@ -515,6 +541,7 @@ function createStreamSimple(
                 message: output,
               });
               clearToolStatus();
+              clearProgressStatus();
               stream.end();
               ended = true;
               break;
@@ -537,6 +564,7 @@ function createStreamSimple(
               output.errorMessage = event.message;
               stream.push({ type: "error", reason: "error", error: output });
               clearToolStatus();
+              clearProgressStatus();
               stream.end();
               ended = true;
               break;
@@ -557,6 +585,7 @@ function createStreamSimple(
           }
           stream.push({ type: "done", reason: "stop", message: output });
           clearToolStatus();
+          clearProgressStatus();
           stream.end();
         }
       } catch (err) {
@@ -564,6 +593,7 @@ function createStreamSimple(
         output.errorMessage = err instanceof Error ? err.message : String(err);
         stream.push({ type: "error", reason: output.stopReason as "aborted" | "error", error: output });
         clearToolStatus();
+        clearProgressStatus();
         stream.end();
       }
     })();

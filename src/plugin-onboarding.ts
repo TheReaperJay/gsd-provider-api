@@ -24,6 +24,18 @@ interface OnboardingCtx {
   modelRegistry: { find(provider: string, modelId: string): unknown };
 }
 
+const DEFAULT_PROMPT_SEEN_KEY = Symbol.for("gsd-provider-api-default-prompt-seen");
+
+function markDefaultPromptSeen(providerId: string): boolean {
+  const runtime = globalThis as unknown as Record<symbol, unknown>;
+  const existing = runtime[DEFAULT_PROMPT_SEEN_KEY];
+  const seen = existing instanceof Set ? existing as Set<string> : new Set<string>();
+  if (!(existing instanceof Set)) runtime[DEFAULT_PROMPT_SEEN_KEY] = seen;
+  if (seen.has(providerId)) return false;
+  seen.add(providerId);
+  return true;
+}
+
 async function promptSetDefault(
   pp: GsdProviderInfo,
   pi: OnboardingPi,
@@ -32,6 +44,7 @@ async function promptSetDefault(
   pc: typeof pico,
 ): Promise<void> {
   if (pp.models.length === 0) return;
+  if (!markDefaultPromptSeen(pp.id)) return;
 
   const shouldSet = await p.confirm({
     message: `Set ${pp.displayName} as your default provider?`,

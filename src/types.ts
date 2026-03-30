@@ -83,6 +83,7 @@ export interface GsdToolResultPayload {
 export type GsdEvent =
   | { type: "text_delta"; text: string }
   | { type: "thinking_delta"; thinking: string }
+  | { type: "progress_delta"; text: string }
   | { type: "tool_call_start"; toolCallId: string; toolName: string; detail?: string }
   | { type: "tool_call_delta"; toolCallId: string; delta: string }
   | { type: "tool_call_end"; toolCallId: string }
