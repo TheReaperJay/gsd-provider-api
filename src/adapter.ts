@@ -379,6 +379,14 @@ function createStreamSimple(
         hasProgressStatus = false;
       }
 
+      function closeThinkingBlock(): void {
+        if (activeThinkingIndex < 0) return;
+        const thinkBlock = output.content[activeThinkingIndex];
+        const thinkText = thinkBlock && thinkBlock.type === "thinking" ? thinkBlock.thinking : "";
+        stream.push({ type: "thinking_end", contentIndex: activeThinkingIndex, content: thinkText, partial: output });
+        activeThinkingIndex = -1;
+      }
+
       function setProgressStatus(text: string): void {
         const ctx = getCtx();
         if (!ctx) return;
@@ -441,6 +449,7 @@ function createStreamSimple(
           switch (event.type) {
             case "text_delta": {
               clearProgressStatus();
+              closeThinkingBlock();
               if (activeContentIndex === -1) {
                 const textBlock: TextContent = { type: "text", text: "" };
                 output.content.push(textBlock);
@@ -471,6 +480,7 @@ function createStreamSimple(
             }
 
             case "tool_call_start": {
+              closeThinkingBlock();
               ensureToolCall(event.toolCallId, event.toolName);
               setToolStatus(event.toolCallId, event.toolName, event.detail);
               break;
@@ -518,12 +528,7 @@ function createStreamSimple(
                 stream.push({ type: "text_end", contentIndex: activeContentIndex, content: text, partial: output });
                 activeContentIndex = -1;
               }
-              if (activeThinkingIndex >= 0) {
-                const thinkBlock = output.content[activeThinkingIndex];
-                const thinkText = thinkBlock && thinkBlock.type === "thinking" ? thinkBlock.thinking : "";
-                stream.push({ type: "thinking_end", contentIndex: activeThinkingIndex, content: thinkText, partial: output });
-                activeThinkingIndex = -1;
-              }
+              closeThinkingBlock();
 
               output.usage.input = event.usage.inputTokens;
               output.usage.output = event.usage.outputTokens;
@@ -554,12 +559,7 @@ function createStreamSimple(
                 stream.push({ type: "text_end", contentIndex: activeContentIndex, content: text, partial: output });
                 activeContentIndex = -1;
               }
-              if (activeThinkingIndex >= 0) {
-                const thinkBlock = output.content[activeThinkingIndex];
-                const thinkText = thinkBlock && thinkBlock.type === "thinking" ? thinkBlock.thinking : "";
-                stream.push({ type: "thinking_end", contentIndex: activeThinkingIndex, content: thinkText, partial: output });
-                activeThinkingIndex = -1;
-              }
+              closeThinkingBlock();
               output.stopReason = "error";
               output.errorMessage = event.message;
               stream.push({ type: "error", reason: "error", error: output });
@@ -578,11 +578,7 @@ function createStreamSimple(
             const text = block && block.type === "text" ? block.text : "";
             stream.push({ type: "text_end", contentIndex: activeContentIndex, content: text, partial: output });
           }
-          if (activeThinkingIndex >= 0) {
-            const thinkBlock = output.content[activeThinkingIndex];
-            const thinkText = thinkBlock && thinkBlock.type === "thinking" ? thinkBlock.thinking : "";
-            stream.push({ type: "thinking_end", contentIndex: activeThinkingIndex, content: thinkText, partial: output });
-          }
+          closeThinkingBlock();
           stream.push({ type: "done", reason: "stop", message: output });
           clearToolStatus();
           clearProgressStatus();

@@ -142,6 +142,33 @@ describe("stream translation", () => {
     assert.ok(textEndEvent, "text_end must be emitted on completion");
   });
 
+  it("splits thinking blocks when tool calls start", async () => {
+    const events = await runEvents([
+      { type: "thinking_delta", thinking: "first thought" },
+      { type: "tool_call_start", toolCallId: "c1", toolName: "Bash", detail: "pwd" },
+      { type: "tool_call_delta", toolCallId: "c1", delta: "{\"command\":\"pwd\"}" },
+      { type: "tool_call_end", toolCallId: "c1" },
+      {
+        type: "tool_result",
+        toolCallId: "c1",
+        toolName: "Bash",
+        result: { content: [{ type: "text", text: "/tmp/project\n" }], isError: false },
+      },
+      { type: "thinking_delta", thinking: "second thought" },
+      { type: "completion", usage: { inputTokens: 5, outputTokens: 5 }, stopReason: "stop" },
+    ]);
+
+    const thinkingStarts = events.filter(e => e.type === "thinking_start");
+    const thinkingEnds = events.filter(e => e.type === "thinking_end");
+    assert.equal(thinkingStarts.length, 2, "thinking must reopen after a tool call boundary");
+    assert.equal(thinkingEnds.length, 2, "each thinking block must end separately");
+
+    const firstThinkingEndIndex = events.findIndex(e => e.type === "thinking_end");
+    const toolStartIndex = events.findIndex(e => e.type === "toolcall_start");
+    assert.ok(firstThinkingEndIndex >= 0 && toolStartIndex >= 0 && firstThinkingEndIndex < toolStartIndex,
+      "thinking block must close before toolcall_start");
+  });
+
   it("keeps tool_result out of assistant text and attaches it to the tool call block", async () => {
     const toolResult = {
       content: [{ type: "text", text: "/tmp/project\n" }],
