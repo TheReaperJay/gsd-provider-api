@@ -13,6 +13,7 @@
  * look up the full Model object and pi.setModel() to persist the choice.
  */
 
+import { ConfirmPrompt, isCancel as isCoreCancel, settings as coreSettings } from "@clack/core";
 import type { CliCheckResult, GsdProviderInfo } from "./types.js";
 import type pico from "picocolors";
 
@@ -36,11 +37,28 @@ function markDefaultPromptSeen(providerId: string): boolean {
   return true;
 }
 
-function clearConfirmAnswerEchoLine(output: NodeJS.WriteStream = process.stdout): void {
-  if (!output.isTTY) return;
-  output.write("\u001B[1A");
-  output.write("\u001B[2K");
-  output.write("\u001B[1G");
+async function confirmNoEcho(message: string): Promise<boolean | symbol> {
+  const prompt = new ConfirmPrompt({
+    active: "Yes",
+    inactive: "No",
+    initialValue: true,
+    render() {
+      if (this.state === "submit" || this.state === "cancel") return undefined;
+
+      const withGuide = coreSettings.withGuide;
+      const indicator = this.value ? "\u25cf Yes / \u25cb No" : "\u25cb Yes / \u25cf No";
+      const lead = this.state === "error" ? "\u25b2" : "\u25c6";
+
+      if (!withGuide) {
+        return `${lead}  ${message}\n${indicator}\n`;
+      }
+
+      return `${lead}  ${message}\n\u2502  ${indicator}\n`;
+    },
+  });
+
+  const result = await prompt.prompt();
+  return result === undefined ? false : result;
 }
 
 export function formatExternalCliAuthenticatedMessage(
@@ -75,12 +93,8 @@ async function promptSetDefault(
   if (pp.models.length === 0) return;
   if (!markDefaultPromptSeen(pp.id)) return;
 
-  const shouldSet = await p.confirm({
-    message: `Set ${pp.displayName} as your default provider?`,
-  });
-  clearConfirmAnswerEchoLine();
-
-  if (p.isCancel(shouldSet) || !shouldSet) return;
+  const shouldSet = await confirmNoEcho(`Set ${pp.displayName} as your default provider?`);
+  if (isCoreCancel(shouldSet) || !shouldSet) return;
 
   let selectedModelId: string;
 

@@ -1,6 +1,6 @@
 {
   "name": "@thereaperjay/gsd-provider-api",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "Provider contracts, registries, discovery, onboarding, and Pi adapter for GSD-compatible provider extensions",
   "license": "MIT",
   "repository": {
@@ -35,6 +35,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@clack/core": "^1.1.0",
     "@clack/prompts": "^1.1.0",
     "@mariozechner/jiti": "^2.6.2",
     "picocolors": "^1.1.1"
