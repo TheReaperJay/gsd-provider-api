@@ -151,7 +151,7 @@ export interface PluginRuntimeState {
 // ─── Provider Onboarding ─────────────────────────────────────────────────────
 
 export type CliCheckResult =
-  | { ok: true; email?: string; displayInfo?: string }
+  | { ok: true; email?: string; subscriptionLabel?: string; displayInfo?: string }
   | { ok: false; reason: string; instruction: string };
 
 /** Optional default onboarding metadata for external CLI providers. */

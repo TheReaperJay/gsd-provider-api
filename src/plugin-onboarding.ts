@@ -13,7 +13,7 @@
  * look up the full Model object and pi.setModel() to persist the choice.
  */
 
-import type { GsdProviderInfo } from "./types.js";
+import type { CliCheckResult, GsdProviderInfo } from "./types.js";
 import type pico from "picocolors";
 
 interface OnboardingPi {
@@ -41,6 +41,28 @@ function clearConfirmAnswerEchoLine(output: NodeJS.WriteStream = process.stdout)
   output.write("\u001B[1A");
   output.write("\u001B[2K");
   output.write("\u001B[1G");
+}
+
+export function formatExternalCliAuthenticatedMessage(
+  displayName: string,
+  result: Extract<CliCheckResult, { ok: true }>,
+): string {
+  const email = typeof result.email === "string" ? result.email.trim() : "";
+  const subscriptionLabel = typeof result.subscriptionLabel === "string" ? result.subscriptionLabel.trim() : "";
+
+  if (email.length > 0 && subscriptionLabel.length > 0) {
+    return `${displayName} authenticated as ${email} (${subscriptionLabel})`;
+  }
+
+  if (email.length > 0) {
+    return `${displayName} authenticated as ${email}`;
+  }
+
+  if (subscriptionLabel.length > 0) {
+    return `${displayName} authenticated (${subscriptionLabel})`;
+  }
+
+  return `${displayName} authenticated`;
 }
 
 async function promptSetDefault(
@@ -111,7 +133,7 @@ export async function runPluginOnboarding(
     s.start(`Checking ${pp.displayName}...`);
     const result = pp.onboarding.check();
     if (result.ok) {
-      s.stop(`${pc.green(pp.displayName)} authenticated${result.email ? ` as ${result.email}` : ""}`);
+      s.stop(formatExternalCliAuthenticatedMessage(pc.green(pp.displayName), result));
       await promptSetDefault(pp, pi, ctx, p, pc);
       return { ok: true };
     }
