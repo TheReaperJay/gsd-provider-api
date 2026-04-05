@@ -86,7 +86,7 @@ export type GsdEvent =
   | { type: "thinking_end" }
   | { type: "progress_delta"; text: string }
   | { type: "tool_call_start"; toolCallId: string; toolName: string; detail?: string }
-  | { type: "tool_call_delta"; toolCallId: string; delta: string }
+  | { type: "tool_call_delta"; toolCallId: string; delta: string; mode?: "append" | "replace" }
   | { type: "tool_call_end"; toolCallId: string }
   | { type: "tool_result"; toolCallId: string; toolName: string; result: GsdToolResultPayload }
   | { type: "completion"; usage: GsdUsage; stopReason: string }

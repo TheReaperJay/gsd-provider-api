@@ -274,6 +274,11 @@ function parseToolCallArguments(raw: string): Record<string, unknown> | null {
   }
 }
 
+function buildForwardedToolDelta(previous: string, next: string, mode: "append" | "replace" | undefined): string {
+  if (mode !== "replace") return next.slice(previous.length);
+  return next.startsWith(previous) ? next.slice(previous.length) : "";
+}
+
 function asToolCallContent(value: unknown): MutableToolCall | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -494,14 +499,19 @@ function createStreamSimple(
             case "tool_call_delta": {
               const { index, block } = ensureToolCall(event.toolCallId);
               const current = toolCallArgsBufferById.get(event.toolCallId) ?? "";
-              const next = current + event.delta;
+              const next = event.mode === "replace" ? event.delta : current + event.delta;
               toolCallArgsBufferById.set(event.toolCallId, next);
 
               const parsedArgs = parseToolCallArguments(next);
               if (parsedArgs) {
                 block.arguments = parsedArgs;
               }
-              stream.push({ type: "toolcall_delta", contentIndex: index, delta: event.delta, partial: output });
+              stream.push({
+                type: "toolcall_delta",
+                contentIndex: index,
+                delta: buildForwardedToolDelta(current, next, event.mode),
+                partial: output,
+              });
               break;
             }
 

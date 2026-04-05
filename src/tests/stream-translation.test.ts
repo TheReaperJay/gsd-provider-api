@@ -219,6 +219,58 @@ describe("stream translation", () => {
     assert.deepEqual(toolCall.externalResult, toolResult, "tool_result payload must be attached to tool call");
   });
 
+  it("replaces tool arguments in partial output when tool_call_delta uses replace mode", async () => {
+    const events = await runEvents([
+      { type: "tool_call_start", toolCallId: "c1", toolName: "write" },
+      {
+        type: "tool_call_delta",
+        toolCallId: "c1",
+        delta: "{\"file_path\":\"docs/test.md\",\"content\":\"t\"}",
+        mode: "replace",
+      },
+      {
+        type: "tool_call_delta",
+        toolCallId: "c1",
+        delta: "{\"file_path\":\"docs/test.md\",\"content\":\"th\"}",
+        mode: "replace",
+      },
+      {
+        type: "tool_call_delta",
+        toolCallId: "c1",
+        delta: "{\"file_path\":\"docs/test.md\",\"content\":\"this\"}",
+        mode: "replace",
+      },
+      { type: "tool_call_end", toolCallId: "c1" },
+      { type: "completion", usage: { inputTokens: 10, outputTokens: 5 }, stopReason: "stop" },
+    ]);
+
+    const toolDeltaEvents = events.filter(
+      (e): e is Extract<AssistantMessageEvent, { type: "toolcall_delta" }> => e.type === "toolcall_delta",
+    );
+    assert.equal(toolDeltaEvents.length, 3, "all replace-mode tool deltas must still emit toolcall_delta events");
+
+    const lastDelta = toolDeltaEvents.at(-1);
+    assert.ok(lastDelta, "last toolcall_delta must exist");
+    const lastToolCall = lastDelta.partial.content.find(
+      (c): c is { type: "toolCall"; id: string; arguments: Record<string, unknown> } =>
+        c.type === "toolCall" && c.id === "c1",
+    );
+    assert.ok(lastToolCall, "tool call must exist in partial output");
+    assert.equal(lastToolCall.arguments.file_path, "docs/test.md");
+    assert.equal(lastToolCall.arguments.content, "this", "partial tool args must be replaced with latest snapshot");
+
+    const doneEvent = events.find(
+      (e): e is Extract<AssistantMessageEvent, { type: "done" }> => e.type === "done",
+    );
+    assert.ok(doneEvent, "done event must be emitted");
+    const finalToolCall = doneEvent.message.content.find(
+      (c): c is { type: "toolCall"; id: string; arguments: Record<string, unknown> } =>
+        c.type === "toolCall" && c.id === "c1",
+    );
+    assert.ok(finalToolCall, "final tool call must exist");
+    assert.equal(finalToolCall.arguments.content, "this", "final tool args must use latest replace snapshot");
+  });
+
   describe("completion event translation", () => {
     it("translates completion GsdEvent to Pi text_end + done events with usage", async () => {
       const events = await runEvents([
